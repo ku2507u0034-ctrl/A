@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import pickle
 
 st.set_page_config(page_title="Customer Churn Prediction", layout="centered")
@@ -12,16 +11,17 @@ st.write("Predict whether a customer is likely to churn using a trained Random F
 with open("model.pkl", "rb") as f:
     model = pickle.load(f)
 
-# Optional: load model columns if saved
+# Load model columns (VERY IMPORTANT)
 try:
     with open("model_columns.pkl", "rb") as f:
         model_columns = pickle.load(f)
 except:
     model_columns = None
+    st.warning("model_columns.pkl not found. Predictions may fail.")
 
 st.header("Enter Customer Details")
 
-# Example input fields based on common telecom churn dataset
+# Input fields
 gender = st.selectbox("Gender", ["Male", "Female"])
 SeniorCitizen = st.selectbox("Senior Citizen", [0, 1])
 Partner = st.selectbox("Partner", ["Yes", "No"])
@@ -38,38 +38,42 @@ PaymentMethod = st.selectbox(
     ["Electronic check", "Mailed check", "Bank transfer (automatic)", "Credit card (automatic)"]
 )
 
-# Manual encoding
+# Raw input (NO manual encoding)
 input_dict = {
-    "gender": 1 if gender == "Male" else 0,
+    "gender": gender,
     "SeniorCitizen": SeniorCitizen,
-    "Partner": 1 if Partner == "Yes" else 0,
-    "Dependents": 1 if Dependents == "Yes" else 0,
+    "Partner": Partner,
+    "Dependents": Dependents,
     "tenure": tenure,
-    "PhoneService": 1 if PhoneService == "Yes" else 0,
-    "PaperlessBilling": 1 if PaperlessBilling == "Yes" else 0,
+    "PhoneService": PhoneService,
+    "PaperlessBilling": PaperlessBilling,
     "MonthlyCharges": MonthlyCharges,
     "TotalCharges": TotalCharges,
-    "Contract": {"Month-to-month": 0, "One year": 1, "Two year": 2}[Contract],
-    "InternetService": {"DSL": 0, "Fiber optic": 1, "No": 2}[InternetService],
-    "PaymentMethod": {
-        "Electronic check": 0,
-        "Mailed check": 1,
-        "Bank transfer (automatic)": 2,
-        "Credit card (automatic)": 3
-    }[PaymentMethod]
+    "Contract": Contract,
+    "InternetService": InternetService,
+    "PaymentMethod": PaymentMethod
 }
 
 input_df = pd.DataFrame([input_dict])
 
+# Apply SAME preprocessing as training
+input_df = pd.get_dummies(input_df)
+
+# Match training columns exactly
+if model_columns is not None:
+    input_df = input_df.reindex(columns=model_columns, fill_value=0)
+
+# Prediction
 if st.button("Predict Churn"):
     try:
         prediction = model.predict(input_df)[0]
         probability = model.predict_proba(input_df)[0][1]
 
         if prediction == 1:
-            st.error(f"The customer is likely to churn. Probability: {probability:.2f}")
+            st.error(f"⚠️ Customer is likely to churn.\n\nProbability: {probability:.2f}")
         else:
-            st.success(f"The customer is not likely to churn. Probability: {probability:.2f}")
+            st.success(f"✅ Customer is not likely to churn.\n\nProbability: {probability:.2f}")
+
     except Exception as e:
-        st.warning("Feature mismatch occurred. Please ensure app inputs match training columns exactly.")
+        st.error("❌ Prediction failed due to feature mismatch.")
         st.text(str(e))
